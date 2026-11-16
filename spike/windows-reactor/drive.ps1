@@ -65,15 +65,17 @@ function Find($by, $val, $scope = 'Descendants') {
   return $null
 }
 function Act($by, $val) {
+  # Mouse click, not InvokePattern.Invoke(): Invoke blocks the caller while a menu or dialog it
+  # opened is up, which hung the first CI run.
   $el = Find $by $val
   if ($el -eq $null) { Log "ACT $by=$val : NOT FOUND"; return $false }
   try {
-    $p = $null
-    if ($el.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); Log "ACT $by=$val : invoke"; Start-Sleep -Milliseconds 800; return $true }
-    if ($el.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p)) { $p.Select(); Log "ACT $by=$val : select"; Start-Sleep -Milliseconds 800; return $true }
-    if ($el.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); Log "ACT $by=$val : toggle"; Start-Sleep -Milliseconds 800; return $true }
-    if ($el.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) { $p.Expand(); Log "ACT $by=$val : expand"; Start-Sleep -Milliseconds 800; return $true }
-    Log "ACT $by=$val : no usable pattern"
+    $r = $el.Current.BoundingRectangle
+    if ($r.IsEmpty) { Log "ACT $by=$val : empty rect"; return $false }
+    Click-At ([int]($r.X + $r.Width / 2)) ([int]($r.Y + $r.Height / 2))
+    Log "ACT $by=$val : click"
+    Start-Sleep -Milliseconds 800
+    return $true
   } catch { Log "ACT $by=$val : EXC $($_.Exception.Message)" }
   return $false
 }
@@ -86,6 +88,7 @@ function Step($name, [scriptblock]$body) { Log "== $name"; try { & $body } catch
 
 # --- launch
 $exeDir = Split-Path $Exe
+Log "screen: $([System.Windows.Forms.Screen]::PrimaryScreen.Bounds)"
 Log "exe size bytes: $((Get-Item $Exe).Length)"
 $script:proc = Start-Process -FilePath $Exe -WorkingDirectory $exeDir -PassThru -RedirectStandardOutput "$Out\app-stdout.txt" -RedirectStandardError "$Out\app-stderr.txt"
 $deadline = (Get-Date).AddSeconds(60)
@@ -212,7 +215,7 @@ Step 'tab tear-out attempt' {
   } else { Log 'O2 tab not found' }
 }
 Start-Sleep -Seconds 1
-Log "process still running: $(-not $script:proc.HasExited)"
+Log "process still running: $(-not $script:proc.HasExited) working set MB: $([int]($script:proc.WorkingSet64/1MB)) private MB: $([int]($script:proc.PrivateMemorySize64/1MB))"
 Stop-Process -Id $script:proc.Id -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 Log 'done'
