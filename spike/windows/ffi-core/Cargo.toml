@@ -1,0 +1,15 @@
+[package]
+name = "ffi_core"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+uniffi = { version = "0.32.2", features = ["tokio"] }
+tokio = { version = "1", features = ["time", "rt-multi-thread"] }
+thiserror = "2"

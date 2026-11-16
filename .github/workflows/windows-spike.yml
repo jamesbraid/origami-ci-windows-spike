@@ -1,0 +1,177 @@
+name: windows-spike (GitHub hosted)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cross compiler and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "$RUNNER_TEMP/rustup-init.sh"
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --default-toolchain stable \
+            --target x86_64-pc-windows-gnu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build dxprobe
+        working-directory: spike/windows/dxprobe
+        run: cargo build --release --target x86_64-pc-windows-gnu
+      - name: Build reactor-panel (windows-reactor, WinUI 3 from Rust)
+        working-directory: spike/windows/reactor-panel
+        continue-on-error: true
+        run: cargo build --release --target x86_64-pc-windows-gnu 2>&1 | tail -80
+      - name: Build rigdll (C ABI for the WinUI/C# host)
+        working-directory: spike/windows/rigdll
+        run: cargo build --release --target x86_64-pc-windows-gnu
+      - name: Collect
+        run: |
+          mkdir -p out
+          cp spike/windows/rigdll/target/x86_64-pc-windows-gnu/release/rigdll.dll out/
+          cp spike/windows/dxprobe/target/x86_64-pc-windows-gnu/release/dxprobe.exe out/
+          cp spike/windows/reactor-panel/target/x86_64-pc-windows-gnu/release/reactor-panel.exe out/ || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dxprobe
+          path: out
+          if-no-files-found: error
+          retention-days: 3
+  run:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dxprobe
+      - name: Run on the default adapter
+        run: ./dxprobe.exe 2>&1
+        continue-on-error: true
+      - name: Run on WARP
+        run: ./dxprobe.exe --warp 2>&1
+        continue-on-error: true
+      - name: Windows App Runtime and desktop facts
+        shell: powershell
+        continue-on-error: true
+        run: |
+          "--- appx runtime packages"
+          try { Get-AppxPackage *WindowsAppRuntime* | ForEach-Object { "$($_.Name) $($_.Version)" } } catch { "appx query: $($_.Exception.Message)" }
+          try { Get-ChildItem "C:\Program Files\WindowsApps" -Filter "*WindowsAppRuntime*" -Name } catch { "WindowsApps listing: $($_.Exception.Message)" }
+          "--- desktop"
+          Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class D{[DllImport("user32.dll")]public static extern IntPtr GetThreadDesktop(uint t);[DllImport("kernel32.dll")]public static extern uint GetCurrentThreadId();[DllImport("user32.dll")]public static extern bool GetUserObjectInformationW(IntPtr h,int i,byte[] b,int n,out int need);[DllImport("user32.dll")]public static extern int GetSystemMetrics(int i);}'
+          $h=[D]::GetThreadDesktop([D]::GetCurrentThreadId()); $b=New-Object byte[] 256; $n=0; [void][D]::GetUserObjectInformationW($h,2,$b,256,[ref]$n); "desktop name: " + [Text.Encoding]::Unicode.GetString($b,0,[Math]::Max(0,$n-2))
+          "SM_CMONITORS: " + [D]::GetSystemMetrics(80)
+          "SM_REMOTESESSION: " + [D]::GetSystemMetrics(0x1000)
+          "session id: " + (Get-Process -Id $PID).SessionId
+          Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class W{[DllImport("user32.dll")]public static extern IntPtr GetProcessWindowStation();[DllImport("user32.dll")]public static extern bool GetUserObjectInformationW(IntPtr h,int i,byte[] b,int n,out int need);}'
+          $w=[W]::GetProcessWindowStation(); $b=New-Object byte[] 256; $n=0; [void][W]::GetUserObjectInformationW($w,2,$b,256,[ref]$n); "window station: " + [Text.Encoding]::Unicode.GetString($b,0,[Math]::Max(0,$n-2))
+          "DWM running: " + [bool](Get-Process dwm -ErrorAction SilentlyContinue)
+          "processes with a window: "; Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "  $($_.ProcessName)" }
+      - name: Run reactor-panel (WinUI 3 SwapChainPanel from Rust)
+        run: |
+          ls -la
+          timeout 25 ./reactor-panel.exe 2>&1 | head -50; echo "exit=${PIPESTATUS[0]}"
+          tasklist | grep -i -E 'reactor|werfault|msg' || true
+        continue-on-error: true
+  ffi-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cross compiler and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "$RUNNER_TEMP/rustup-init.sh"
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --default-toolchain stable \
+            --target x86_64-pc-windows-gnu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build the core as a Windows DLL
+        working-directory: spike/windows/ffi-core
+        run: cargo build --release --target x86_64-pc-windows-gnu
+      - name: Install uniffi-bindgen-cs v0.12.0+v0.32.0
+        run: cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag 'v0.12.0+v0.32.0' --locked
+      - name: Generate the C# bindings
+        run: |
+          mkdir -p out
+          uniffi-bindgen-cs --library spike/windows/ffi-core/target/x86_64-pc-windows-gnu/release/ffi_core.dll --out-dir out
+          ls -la out
+          cp spike/windows/ffi-core/target/x86_64-pc-windows-gnu/release/ffi_core.dll out/
+          cp spike/windows/ffi-cs/ffi.csproj spike/windows/ffi-cs/Program.cs out/
+          wc -l out/*.cs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffi
+          path: out
+          if-no-files-found: error
+          retention-days: 3
+  ffi-run:
+    needs: ffi-build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffi
+          path: ffi
+      - name: Install the .NET SDK (user level)
+        shell: powershell
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+          ./dotnet-install.ps1 -Channel 8.0 -InstallDir "$env:RUNNER_TEMP\dotnet"
+          "$env:RUNNER_TEMP\dotnet" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+      - name: Build and run the C# client
+        working-directory: ffi
+        run: |
+          export PATH="$RUNNER_TEMP/dotnet:$PATH"
+          dotnet --version
+          ls
+          dotnet build -c Release 2>&1 | tail -40
+          export DOTNET_ROOT="$RUNNER_TEMP/dotnet"; cd bin/Release/net8.0 && ./ffi.exe
+  winui:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: dxprobe
+          path: art
+      - name: Install the .NET SDK (user level)
+        shell: powershell
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+          ./dotnet-install.ps1 -Channel 8.0 -InstallDir "$env:RUNNER_TEMP\dotnet"
+      - name: Build the WinUI 3 app (unpackaged, self-contained runtime)
+        working-directory: spike/windows/winui
+        run: |
+          export PATH="$RUNNER_TEMP/dotnet:$PATH"
+          cp ../../../art/rigdll.dll .
+          time dotnet build -c Release -p:Platform=x64 2>&1 | tail -60
+      - name: Run it
+        working-directory: spike/windows/winui
+        continue-on-error: true
+        run: |
+          out=bin/x64/Release/net8.0-windows10.0.19041.0/win-x64
+          echo "output dir: $out"
+          ls "$out" | head -20
+          cd "$out"; set +e; timeout 60 ./WinUiSpike.exe > run.txt 2>&1; echo "exit=$?"; head -60 run.txt; exit 0
