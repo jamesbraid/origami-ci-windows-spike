@@ -171,14 +171,27 @@ jobs:
           export PATH="$RUNNER_TEMP/dotnet:$PATH"
           cp ../../../art/rigdll.dll .
           time dotnet build -c Release -p:Platform=x64 2>&1 | tail -60
-      - name: Run it
+      - name: Run it, with a screenshot of the desktop while it presents
         working-directory: spike/windows/winui
         continue-on-error: true
         run: |
+          set +e
+          shots="$PWD/../../../shots"; mkdir -p "$shots"
           out=bin/x64/Release/net8.0-windows10.0.19041.0/win-x64
-          echo "output dir: $out"
-          ls "$out" | head -20
-          cd "$out"; set +e; timeout 60 ./WinUiSpike.exe > run.txt 2>&1; echo "exit=$?"; head -60 run.txt; exit 0
+          cd "$out"
+          HOLD_MS=9000 timeout 60 ./WinUiSpike.exe > run.txt 2>&1 &
+          apid=$!
+          sleep 6
+          powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \$bmp=New-Object System.Drawing.Bitmap \$b.Width,\$b.Height; \$g=[System.Drawing.Graphics]::FromImage(\$bmp); \$g.CopyFromScreen(\$b.Location,[System.Drawing.Point]::Empty,\$b.Size); \$bmp.Save('shot.png'); 'screenshot ' + \$b.Width + 'x' + \$b.Height"
+          wait $apid; echo "exit=$?"
+          head -60 run.txt
+          cp shot.png "$shots/" || true
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winui-screenshot
+          path: shots
+          if-no-files-found: warn
 
   reactor-native:
     # Builds on the Windows host so windows-reactor-setup can stage the app runtime beside the exe.

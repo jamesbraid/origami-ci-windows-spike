@@ -44,7 +44,10 @@ public sealed partial class MainWindow : Window {
                 ms.Sort();
                 Log.Say("frame_ms_median", ms[ms.Count / 2].ToString("F3"));
                 Log.Say("frames", frames.ToString());
-                Environment.Exit(0);
+                var hold = int.TryParse(Environment.GetEnvironmentVariable("HOLD_MS"), out var h) ? h : 0;
+                if (hold == 0) Environment.Exit(0);
+                // Keep presenting so a screenshot can see the panel.
+                new Thread(() => { Thread.Sleep(hold); Environment.Exit(0); }) { IsBackground = true }.Start();
             }
         };
     }
