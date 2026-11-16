@@ -1,0 +1,82 @@
+name: reactor-shell (GitHub hosted, interactive desktop)
+on:
+  workflow_dispatch:
+    inputs:
+      rev:
+        description: windows-rs commit to build against
+        default: c0297e588ce9754ad44f80787c918a45092d735a
+      profile:
+        description: cargo profile
+        default: release
+  push:
+    branches: [windows-reactor-shell]
+jobs:
+  shell:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      REV: ${{ inputs.rev || 'c0297e588ce9754ad44f80787c918a45092d735a' }}
+      PROFILE: ${{ inputs.profile || 'release' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain facts
+        run: |
+          rustc --version; cargo --version
+          where link.exe || true
+          echo "rev=$REV profile=$PROFILE"
+          date -u
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            spike/windows-reactor/origami-shell/target
+          key: shell-${{ runner.os }}-${{ env.REV }}-${{ env.PROFILE }}-${{ hashFiles('spike/windows-reactor/origami-shell/Cargo.toml', 'spike/windows-reactor/origami-shell/src/**') }}
+          restore-keys: |
+            shell-${{ runner.os }}-${{ env.REV }}-${{ env.PROFILE }}-
+      - name: Point Cargo.toml at the requested windows-rs commit
+        working-directory: spike/windows-reactor/origami-shell
+        run: sed -i "s/rev = \"[0-9a-f]\{40\}\"/rev = \"$REV\"/g" Cargo.toml && grep -n 'rev =' Cargo.toml | head
+      - name: Build
+        working-directory: spike/windows-reactor/origami-shell
+        run: |
+          start=$(date +%s)
+          if [ "$PROFILE" = release ]; then cargo build --release 2>&1 | tail -80; else cargo build --profile "$PROFILE" 2>&1 | tail -80; fi
+          echo "build seconds: $(( $(date +%s) - start ))"
+      - name: Sizes
+        working-directory: spike/windows-reactor/origami-shell
+        run: |
+          d=target/$PROFILE
+          ls -la $d | head -40
+          echo "--- exe bytes"; stat -c '%s %n' $d/origami-shell.exe
+          echo "--- staged runtime (everything beside the exe except build dirs)"
+          find $d -maxdepth 1 -type f ! -name '*.d' ! -name '*.pdb' ! -name '*.rlib' ! -name '*.exp' ! -name '*.lib' -printf '%s %f\n' | sort -n
+          find $d -maxdepth 1 -mindepth 1 -type d ! -name build ! -name deps ! -name examples ! -name incremental ! -name .fingerprint -printf 'dir %f\n'
+          echo "--- total bytes of exe plus staged files and runtime dirs"
+          (cd $d && du -sb --exclude=build --exclude=deps --exclude=incremental --exclude=.fingerprint --exclude=examples . ) || true
+          echo "--- pdb"; ls -la $d/*.pdb 2>/dev/null || true
+      - name: Drive it on the desktop
+        shell: powershell
+        working-directory: spike/windows-reactor
+        run: |
+          $exe = (Resolve-Path "origami-shell/target/$env:PROFILE/origami-shell.exe").Path
+          ./drive.ps1 -Exe $exe -Out "$PWD/out"
+        continue-on-error: true
+      - name: App stdout
+        if: always()
+        run: |
+          cd spike/windows-reactor/out 2>/dev/null || exit 0
+          echo "---- app stdout"; head -300 app-stdout.txt || true
+          echo "---- app stderr"; head -60 app-stderr.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shell-${{ github.run_id }}
+          path: spike/windows-reactor/out
+          if-no-files-found: warn
+          retention-days: 10
