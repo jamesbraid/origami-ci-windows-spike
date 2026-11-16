@@ -26,6 +26,9 @@ jobs:
         working-directory: spike/windows/reactor-panel
         continue-on-error: true
         run: cargo build --release --target x86_64-pc-windows-gnu 2>&1 | tail -80
+      - name: Build qemu-attach
+        working-directory: spike/windows/qemu-attach
+        run: cargo build --release --target x86_64-pc-windows-gnu
       - name: Build rigdll (C ABI for the WinUI/C# host)
         working-directory: spike/windows/rigdll
         run: cargo build --release --target x86_64-pc-windows-gnu
@@ -33,6 +36,7 @@ jobs:
         run: |
           mkdir -p out
           cp spike/windows/rigdll/target/x86_64-pc-windows-gnu/release/rigdll.dll out/
+          cp spike/windows/qemu-attach/target/x86_64-pc-windows-gnu/release/qemu-attach.exe out/
           cp spike/windows/dxprobe/target/x86_64-pc-windows-gnu/release/dxprobe.exe out/
           cp spike/windows/reactor-panel/target/x86_64-pc-windows-gnu/release/reactor-panel.exe out/ || true
       - uses: actions/upload-artifact@v4
@@ -104,7 +108,7 @@ jobs:
       - name: Generate the C# bindings
         run: |
           mkdir -p out
-          uniffi-bindgen-cs --library spike/windows/ffi-core/target/x86_64-pc-windows-gnu/release/ffi_core.dll --out-dir out
+          (cd spike/windows/ffi-core && uniffi-bindgen-cs --library target/x86_64-pc-windows-gnu/release/ffi_core.dll --out-dir ../../../out)
           ls -la out
           cp spike/windows/ffi-core/target/x86_64-pc-windows-gnu/release/ffi_core.dll out/
           cp spike/windows/ffi-cs/ffi.csproj spike/windows/ffi-cs/Program.cs out/
@@ -175,3 +179,26 @@ jobs:
           echo "output dir: $out"
           ls "$out" | head -20
           cd "$out"; set +e; timeout 60 ./WinUiSpike.exe > run.txt 2>&1; echo "exit=$?"; head -60 run.txt; exit 0
+
+  reactor-native:
+    # Builds on the Windows host so windows-reactor-setup can stage the app runtime beside the exe.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build reactor-panel self-contained
+        working-directory: spike/windows/reactor-panel
+        env:
+          REACTOR_SELF_CONTAINED: "1"
+        run: |
+          rustup show | head -5
+          cargo build --release 2>&1 | tail -30
+      - name: Run it
+        working-directory: spike/windows/reactor-panel
+        run: |
+          set +e
+          ls target/release | head -30
+          cd target/release; timeout 40 ./reactor-panel.exe > run.txt 2>&1; echo "exit=$?"; head -40 run.txt; exit 0
