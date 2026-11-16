@@ -182,18 +182,26 @@ Step 'library, display, pointer capture, keyboard grab' {
     $r = $d.Current.BoundingRectangle
     Log "display rect: $r"
     $cx = [int]($r.X + $r.Width / 2); $cy = [int]($r.Y + $r.Height / 2)
-    Click-At $cx $cy $true
-    foreach ($k in 1..8) { Move-To ($cx + $k * 10) ($cy + $k * 5) }
-    Shot 'drag-inside'
-    # drag far outside the panel (past the window edge) while the button is still down
-    foreach ($k in 1..6) { Move-To ([int]($cx + 80 + $k * 60)) ([int]($cy + 40 - $k * 20)) }
-    [W]::mouse_event(0x4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 500
-    Log 'released the button outside the panel'
-    Keys 'abc'            # grabbed: should reach the core, not any control
-    Keys '^o'; Start-Sleep -Seconds 1  # grabbed: must NOT open the picker
+    # 1. plain click: grabs input and asks for focus; typed keys and Ctrl+O must reach the core only
+    Click-At $cx $cy
+    Keys 'abc'
+    Keys '^o'; Start-Sleep -Seconds 1
     Shot 'grabbed-after-keys'
     Keys '^%g'            # Ctrl+Alt+G releases
     Shot 'released'
+    # 2. press, drag past the window edge with the button down, release outside
+    Click-At $cx $cy $true
+    foreach ($k in 1..8) { Move-To ($cx + $k * 10) ($cy + $k * 5) }
+    Shot 'drag-inside'
+    foreach ($k in 1..6) { Move-To ([int]($cx + 80 + $k * 60)) ([int]($cy + 40 - $k * 20)) }
+    [W]::mouse_event(0x4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 500
+    Log 'released the button outside the panel'
+    Shot 'after-release-outside'
+    Keys 'xyz'
+    Log 'keys typed after releasing outside, foreground not restored'
+    [W]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 500
+    Keys 'xyz'
+    Keys '^%g'
   } else { Log 'display element not found by UIA' }
 }
 Step 'tabs' {
