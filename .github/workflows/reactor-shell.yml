@@ -12,13 +12,17 @@ on:
     branches: [windows-reactor-shell]
 jobs:
   shell:
+    strategy:
+      fail-fast: false
+      matrix:
+        rev: [c0297e588ce9754ad44f80787c918a45092d735a, f37e2f9046cf9710fe00285436c4d22ad6053d72]
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
       run:
         shell: bash
     env:
-      REV: ${{ inputs.rev || 'c0297e588ce9754ad44f80787c918a45092d735a' }}
+      REV: ${{ matrix.rev }}
       PROFILE: ${{ inputs.profile || 'release' }}
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +80,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shell-${{ github.run_id }}
+          name: shell-${{ github.run_id }}-${{ matrix.rev }}
           path: spike/windows-reactor/out
           if-no-files-found: warn
           retention-days: 10

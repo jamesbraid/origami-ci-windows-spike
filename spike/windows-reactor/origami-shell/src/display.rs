@@ -8,6 +8,8 @@ use windows_reactor::*;
 impl Shell {
     pub fn tabs_page(&self, cx: &ViewContext<Self>) -> View {
         TabView::new()
+            .vertical_alignment(VerticalAlignment::Stretch)
+            .horizontal_alignment(HorizontalAlignment::Stretch)
             .automation_id("machine-tabs")
             .automation_name("Machines")
             .selected_index(self.selected)

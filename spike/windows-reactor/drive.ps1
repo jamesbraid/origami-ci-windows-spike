@@ -35,13 +35,18 @@ function Main-Window {
   [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, $cond)
 }
 function Dump-Tree($el, $depth, $sb) {
-  if ($depth -gt 14) { return }
-  $c = $el.Current
-  $pats = ($el.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName -replace 'Identifiers.Pattern', '' }) -join ','
-  [void]$sb.AppendLine(("{0}{1} name='{2}' id='{3}' class='{4}' patterns=[{5}] rect={6}" -f (' ' * ($depth * 2)), $c.ControlType.ProgrammaticName.Replace('ControlType.', ''), $c.Name, $c.AutomationId, $c.ClassName, $pats, $c.BoundingRectangle))
-  $w = [Windows.Automation.TreeWalker]::RawViewWalker
-  $k = $w.GetFirstChild($el)
-  while ($k -ne $null) { Dump-Tree $k ($depth + 1) $sb; $k = $w.GetNextSibling($k) }
+  if ($depth -gt 16) { return }
+  try {
+    $c = $el.Current
+    $pats = ''
+    try { $pats = ($el.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName -replace 'Identifiers.Pattern', '' }) -join ',' } catch {}
+    $ct = ''
+    if ($c.ControlType -ne $null) { $ct = $c.ControlType.ProgrammaticName.Replace('ControlType.', '') }
+    [void]$sb.AppendLine(("{0}{1} name='{2}' id='{3}' class='{4}' patterns=[{5}] rect={6}" -f (' ' * ($depth * 2)), $ct, $c.Name, $c.AutomationId, $c.ClassName, $pats, $c.BoundingRectangle))
+    $w = [Windows.Automation.TreeWalker]::RawViewWalker
+    $k = $w.GetFirstChild($el)
+    while ($k -ne $null) { Dump-Tree $k ($depth + 1) $sb; $k = $w.GetNextSibling($k) }
+  } catch { [void]$sb.AppendLine(("{0}<error {1}>" -f (' ' * ($depth * 2)), $_.Exception.Message)) }
 }
 function Dump($name) {
   $sb = New-Object System.Text.StringBuilder
@@ -174,14 +179,14 @@ Step 'library, display, pointer capture, keyboard grab' {
   } else { Log 'display element not found by UIA' }
 }
 Step 'tabs' {
-  Act 'name' 'Add tab' | Out-Null; Start-Sleep -Seconds 1; Shot 'tab-added'
+  Act 'name' 'Add New Tab' | Out-Null; Start-Sleep -Seconds 1; Shot 'tab-added'
   Dump 'tabs'
 }
 Step 'second window and console' {
   Act 'name' 'Octane2' | Out-Null
   Act 'name' 'Pop out' | Out-Null; Start-Sleep -Seconds 3; Shot 'popout-window'
   $mw = @(Main-Window); Log "top-level windows now: $($mw.Count)"
-  Act 'name' 'More' | Out-Null
+  Act 'name' 'More options for Machine toolbar' | Out-Null
   Act 'name' 'Console window' | Out-Null; Start-Sleep -Seconds 3
   Keys 'hello'; Shot 'console-window'
   Dump 'two-windows'

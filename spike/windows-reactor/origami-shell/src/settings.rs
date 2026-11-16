@@ -27,7 +27,7 @@ impl Shell {
         });
         ScrollViewer::new()
             .content(
-                StackPanel::new().margin(24.0).spacing(14.0).max_width(560.0).children((
+                StackPanel::new().margin(24.0).spacing(14.0).max_width(560.0).horizontal_alignment(HorizontalAlignment::Left).children((
                     TextBlock::new().text("Machine settings").font_size(24.0),
                     TextBox::new()
                         .automation_id("setting-name")

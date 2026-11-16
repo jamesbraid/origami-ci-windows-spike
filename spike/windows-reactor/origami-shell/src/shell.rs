@@ -25,6 +25,9 @@ impl Shell {
             let alt = info.modifiers.contains(InputModifiers::ALT);
             let shift = info.modifiers.contains(InputModifiers::SHIFT);
             let k = info.key.0;
+            if ctrl || alt {
+                println!("shell: preview key vk={k:#x} ctrl={ctrl} alt={alt} shift={shift} grabbed={}", core.borrow().grabbed);
+            }
             if core.borrow().grabbed {
                 if ctrl && alt && k == 0x47 {
                     tx.send(Msg::Grab(false));
@@ -128,6 +131,7 @@ impl Shell {
 
     pub fn command_bar(&self, cx: &ViewContext<Self>) -> CommandBar {
         CommandBar::new()
+            .horizontal_alignment(HorizontalAlignment::Left)
             .automation_id("toolbar")
             .automation_name("Machine toolbar")
             .grid_row(1)
