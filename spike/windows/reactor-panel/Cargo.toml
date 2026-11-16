@@ -28,4 +28,4 @@ features = [
 ]
 
 [build-dependencies]
-windows-reactor-setup = "0.100.1"
+windows-reactor-setup = "0.100.0"
