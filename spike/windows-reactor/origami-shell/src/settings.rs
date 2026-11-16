@@ -19,10 +19,10 @@ impl Shell {
                 .style(if self.card == i { ButtonStyle::Accent } else { ButtonStyle::Default })
                 .automation_id(format!("card-{i}"))
                 .on_click(cx.message(Msg::Card(i)))
-                .content(StackPanel::new().padding(Thickness::xy(8.0, 6.0)).children((
-                    TextBlock::new().text(*name).font_weight(FontWeight::SemiBold),
+                .content(Border::new().padding(Thickness::xy(8.0, 6.0)).content(StackPanel::new().children((
+                    TextBlock::new().text(*name).font_weight(FontWeight::SEMI_BOLD),
                     TextBlock::new().text(*sub).font_size(12.0),
-                )))
+                ))))
                 .into()
         });
         ScrollViewer::new()
@@ -135,7 +135,7 @@ impl Shell {
             _ => false,
         };
         if again {
-            let _ = cx.set_timeout(std::time::Duration::from_millis(150), Msg::AssistReopen);
+            let _ = cx.set_local_timeout(std::time::Duration::from_millis(150), || Msg::AssistReopen);
         }
     }
 }

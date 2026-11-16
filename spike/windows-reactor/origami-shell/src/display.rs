@@ -44,33 +44,28 @@ impl Shell {
     /// The display. The Border is the focus and input target because SwapChainPanel is not a
     /// Control; pointer capture on press keeps drags flowing after the pointer leaves it.
     fn display(&self, cx: &ViewContext<Self>) -> View {
-        let (core, tx) = (self.core.clone(), cx.sender());
-        let (c1, t1) = (core.clone(), tx.clone());
-        let pressed = RoutedCallback::new(move |i: PointerEventInfo| {
+        let core = self.core.clone();
+        // At this windows-rs commit pointer callbacks are payload callbacks: they run on the UI
+        // thread as the event arrives and can only queue a message, not mark the event handled.
+        let c1 = core.clone();
+        let pressed = cx.callback(move |i: PointerEventInfo| {
             let mut c = c1.borrow_mut();
             c.pointer("press", &i);
-            if !c.grabbed {
-                c.grabbed = true;
-            }
-            t1.send(Msg::Touch);
-            true
+            c.grabbed = true;
+            Msg::Touch
         });
-        let (c2, t2) = (core.clone(), tx.clone());
-        let moved = RoutedCallback::new(move |i: PointerEventInfo| {
-            let mut c = c2.borrow_mut();
-            c.pointer("move", &i);
-            if i.is_left_button_pressed && c.buttons == 1 && (i.x < 0.0 || i.y < 0.0) {
-                t2.send(Msg::Touch);
-            }
-            true
+        let (c2, n) = (core.clone(), std::cell::Cell::new(0u32));
+        let moved = cx.callback(move |i: PointerEventInfo| {
+            c2.borrow_mut().pointer("move", &i);
+            n.set(n.get() + 1);
+            if n.get() % 10 == 0 { Msg::Touch } else { Msg::Quiet }
         });
-        let (c3, t3) = (core.clone(), tx.clone());
-        let released = RoutedCallback::new(move |i: PointerEventInfo| {
+        let c3 = core.clone();
+        let released = cx.callback(move |i: PointerEventInfo| {
             c3.borrow_mut().pointer("release", &i);
-            t3.send(Msg::Touch);
-            true
+            Msg::Touch
         });
-        let (c4, t4) = (core.clone(), tx.clone());
+        let (c4, t4) = (core.clone(), cx.sender());
         let lost = move || {
             c4.borrow_mut().say("pointer capture lost".into());
             t4.send(Msg::Touch);
@@ -134,7 +129,6 @@ impl Shell {
                         s.borrow_mut().frame(&c, false);
                     }
                 }
-                _ => {}
             });
             Some(Box::new(move || drop(obs)))
         });

@@ -41,6 +41,8 @@ pub enum Msg {
     AssistKind(Option<usize>),
     Surface(Result<(), String>),
     Touch,
+    /// Pointer moves: the core already has them, nothing to redraw.
+    Quiet,
     PopOut,
     Console,
 }
@@ -181,6 +183,7 @@ impl Component for Shell {
                 };
                 println!("shell: {}", self.surface_state);
             }
+            Msg::Quiet => {}
             Msg::Touch => {
                 let c = self.core.borrow();
                 self.status = format!("core: {}", c.last);

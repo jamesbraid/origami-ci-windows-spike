@@ -68,7 +68,6 @@ impl Component for Pop {
                         s.borrow_mut().frame(&c, console);
                     }
                 }
-                _ => {}
             });
             Some(Box::new(move || drop(obs)))
         });
