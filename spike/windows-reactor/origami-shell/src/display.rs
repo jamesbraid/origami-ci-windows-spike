@@ -50,10 +50,14 @@ impl Shell {
         // At this windows-rs commit pointer callbacks are payload callbacks: they run on the UI
         // thread as the event arrives and can only queue a message, not mark the event handled.
         let c1 = core.clone();
+        let dref = self.display_ref.clone();
         let pressed = cx.callback(move |i: PointerEventInfo| {
             let mut c = c1.borrow_mut();
             c.pointer("press", &i);
             c.grabbed = true;
+            // Border is not a Control; ask for focus and log what WinUI says.
+            let queued = dref.request_focus_result(|r| println!("shell: request_focus -> {r:?}"));
+            println!("shell: request_focus queued={queued}");
             Msg::Touch
         });
         let (c2, n) = (core.clone(), std::cell::Cell::new(0u32));
@@ -78,6 +82,7 @@ impl Shell {
             true
         });
         Border::new()
+            .element_ref(&self.display_ref)
             .automation_id("display")
             .automation_name("Machine display")
             .capture_pointer_on_press(true)

@@ -136,7 +136,7 @@ impl Shell {
         };
         if again {
             println!("shell: scheduling reopen");
-            let _ = cx.set_local_timeout(std::time::Duration::from_millis(150), || Msg::AssistReopen);
+            self.timer = Some(cx.set_local_timeout(std::time::Duration::from_millis(150), || Msg::AssistReopen));
         }
     }
 }

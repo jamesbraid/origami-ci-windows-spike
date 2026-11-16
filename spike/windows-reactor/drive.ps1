@@ -85,8 +85,14 @@ function Act($by, $val) {
   } catch { Log "ACT $by=$val : EXC $($_.Exception.Message)" }
   return $false
 }
+function Move-To($x, $y) {
+  # Absolute mouse_event so the pointer generates real move input, not just a cursor jump.
+  $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  $ax = [int](($x * 65535) / $b.Width); $ay = [int](($y * 65535) / $b.Height)
+  [W]::mouse_event(0x8001, $ax, $ay, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 120
+}
 function Click-At($x, $y, $hold = $false) {
-  [W]::SetCursorPos($x, $y); Start-Sleep -Milliseconds 150
+  Move-To $x $y; Start-Sleep -Milliseconds 150
   [W]::mouse_event(0x2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 150
   if (-not $hold) { [W]::mouse_event(0x4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 300 }
 }
@@ -177,12 +183,10 @@ Step 'library, display, pointer capture, keyboard grab' {
     Log "display rect: $r"
     $cx = [int]($r.X + $r.Width / 2); $cy = [int]($r.Y + $r.Height / 2)
     Click-At $cx $cy $true
-    [W]::SetCursorPos($cx + 40, $cy + 20); Start-Sleep -Milliseconds 200
-    [W]::SetCursorPos($cx + 80, $cy + 40); Start-Sleep -Milliseconds 200
+    foreach ($k in 1..8) { Move-To ($cx + $k * 10) ($cy + $k * 5) }
     Shot 'drag-inside'
     # drag far outside the panel (past the window edge) while the button is still down
-    [W]::SetCursorPos([int]($r.X + $r.Width + 60), [int]($r.Y - 30)); Start-Sleep -Milliseconds 300
-    [W]::SetCursorPos([int]($r.X + $r.Width + 90), [int]($r.Y - 60)); Start-Sleep -Milliseconds 300
+    foreach ($k in 1..6) { Move-To ([int]($cx + 80 + $k * 60)) ([int]($cy + 40 - $k * 20)) }
     [W]::mouse_event(0x4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 500
     Log 'released the button outside the panel'
     Keys 'abc'            # grabbed: should reach the core, not any control
@@ -219,7 +223,7 @@ Step 'tab tear-out attempt' {
     $r = $ti.Current.BoundingRectangle
     $x = [int]($r.X + $r.Width / 2); $y = [int]($r.Y + $r.Height / 2)
     Click-At $x $y $true
-    for ($i = 1; $i -le 10; $i++) { [W]::SetCursorPos($x, $y + $i * 30); Start-Sleep -Milliseconds 80 }
+    for ($i = 1; $i -le 10; $i++) { Move-To $x ($y + $i * 30) }
     [W]::mouse_event(0x4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Seconds 1
     Shot 'tab-drag-out'
     Log "top-level windows after tab drag: $(@(Main-Window).Count)"

@@ -74,6 +74,9 @@ pub struct Shell {
     pub assist_step: usize,
     pub assist_kind: Option<usize>,
     pub last_file: String,
+    /// Dropping a ComponentTimer cancels it, so the assistant's reopen timer lives here.
+    pub timer: Option<ComponentTimer>,
+    pub display_ref: ElementRef<Border>,
 }
 
 impl Component for Shell {
@@ -104,6 +107,8 @@ impl Component for Shell {
             assist_step: 0,
             assist_kind: Some(0),
             last_file: "(none)".into(),
+            timer: None,
+            display_ref: ElementRef::new(),
         }
     }
 
