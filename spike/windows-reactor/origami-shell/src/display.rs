@@ -110,6 +110,14 @@ impl Shell {
                         c.panel = (width, height);
                     }
                     if std::mem::replace(&mut *started.borrow_mut(), true) {
+                        if let Some(s) = slot.borrow().clone() {
+                            if width > 0.0 && height > 0.0 {
+                                let tx = tx.clone();
+                                s.borrow().rebind(&panel2, move |r| {
+                                    let _ = tx.send(Msg::Surface(r));
+                                });
+                            }
+                        }
                         return;
                     }
                     let (slot, tx) = (slot.clone(), tx.clone());

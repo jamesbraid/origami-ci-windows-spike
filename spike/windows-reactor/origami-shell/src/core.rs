@@ -62,7 +62,17 @@ impl Core {
 pub struct Surface {
     rig: Rig,
     sc: windows::Win32::Graphics::Dxgi::IDXGISwapChain3,
+    unk: wc::IUnknown,
     pub tag: u32,
+}
+
+impl Surface {
+    /// Hand the same swap chain to a (possibly new) panel. The page that hosts the panel is
+    /// rebuilt when the user switches sidebar pages, so a binding made once goes stale.
+    pub fn rebind(&self, panel: &ElementRef<SwapChainPanel>, done: impl Fn(Result<(), String>) + 'static) {
+        let queued = panel.request_set_swap_chain(self.unk.clone(), move |r| done(r.map_err(|e| format!("{e:?}"))));
+        d3d::say("panel_rebind_queued", queued);
+    }
 }
 
 impl Surface {
@@ -137,7 +147,7 @@ pub fn attach(
     };
     match build() {
         Ok((rig, sc, iu)) => {
-            let surface = Rc::new(RefCell::new(Surface { rig, sc, tag }));
+            let surface = Rc::new(RefCell::new(Surface { rig, sc, unk: iu.clone(), tag }));
             let s2 = surface.clone();
             let queued = panel.request_set_swap_chain(iu, move |r| match r {
                 Ok(()) => done(Ok(s2.clone())),

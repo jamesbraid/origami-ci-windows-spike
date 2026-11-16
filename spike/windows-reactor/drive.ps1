@@ -66,12 +66,18 @@ function Find($by, $val, $scope = 'Descendants') {
 }
 function Act($by, $val) {
   # Mouse click, not InvokePattern.Invoke(): Invoke blocks the caller while a menu or dialog it
-  # opened is up, which hung the first CI run.
+  # opened is up, which hung the first CI run. Off-screen items are scrolled into view first;
+  # radio buttons that stay off-screen are selected through SelectionItemPattern.
   $el = Find $by $val
   if ($el -eq $null) { Log "ACT $by=$val : NOT FOUND"; return $false }
   try {
+    $p = $null
+    if ($el.TryGetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern, [ref]$p)) { try { $p.ScrollIntoView(); Start-Sleep -Milliseconds 400 } catch {} }
     $r = $el.Current.BoundingRectangle
-    if ($r.IsEmpty) { Log "ACT $by=$val : empty rect"; return $false }
+    if ($r.IsEmpty -or $r.Width -lt 1) {
+      if ($el.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p)) { $p.Select(); Log "ACT $by=$val : select (off-screen)"; Start-Sleep -Milliseconds 800; return $true }
+      Log "ACT $by=$val : empty rect"; return $false
+    }
     Click-At ([int]($r.X + $r.Width / 2)) ([int]($r.Y + $r.Height / 2))
     Log "ACT $by=$val : click"
     Start-Sleep -Milliseconds 800
@@ -94,7 +100,7 @@ $script:proc = Start-Process -FilePath $Exe -WorkingDirectory $exeDir -PassThru 
 $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline) { if (@(Main-Window).Count -gt 0) { break }; if ($script:proc.HasExited) { break }; Start-Sleep -Milliseconds 500 }
 Log "process exited early: $($script:proc.HasExited) exit=$(if ($script:proc.HasExited) { $script:proc.ExitCode })"
-Start-Sleep -Seconds 4
+Start-Sleep -Seconds 12
 $mw = @(Main-Window)
 Log "top-level UIA windows: $($mw.Count)"
 if ($mw.Count -gt 0) {
@@ -108,10 +114,15 @@ Shot 'initial'
 Dump 'initial'
 
 Step 'accelerators, not grabbed' {
+  Shot 'initial-display'
   Keys '^n'; Keys '^r'; Keys '^w'
   Keys '^,'; Shot 'ctrl-comma-settings'
-  Act 'id' 'library' | Out-Null
+  Log 'now click the sidebar to put focus back, then repeat Ctrl+W and Ctrl+comma'
   Act 'name' 'Library' | Out-Null
+  Keys '^w'
+  Keys '^,'; Shot 'ctrl-comma-after-click'
+  Act 'name' 'Library' | Out-Null
+  Shot 'library-after-switch'
 }
 Step 'file picker via Ctrl+O' {
   Keys '^o'; Start-Sleep -Seconds 2; Shot 'file-picker-open'
