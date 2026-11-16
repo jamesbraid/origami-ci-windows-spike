@@ -174,7 +174,10 @@ impl Component for Shell {
                 self.assist_open = true;
             }
             Msg::AssistClosed(r) => self.assist_closed(r, cx),
-            Msg::AssistReopen => self.assist_open = true,
+            Msg::AssistReopen => {
+                println!("shell: assistant reopen timer fired, step {}", self.assist_step);
+                self.assist_open = true;
+            }
             Msg::AssistKind(k) => self.assist_kind = k,
             Msg::Surface(r) => {
                 self.surface_state = match r {

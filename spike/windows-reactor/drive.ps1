@@ -200,7 +200,7 @@ Step 'second window and console' {
   Act 'name' 'Octane2' | Out-Null
   Act 'name' 'Pop out' | Out-Null; Start-Sleep -Seconds 3; Shot 'popout-window'
   $mw = @(Main-Window); Log "top-level windows now: $($mw.Count)"
-  Act 'name' 'More options for Machine toolbar' | Out-Null
+  Act 'name' 'View' | Out-Null
   Act 'name' 'Console window' | Out-Null; Start-Sleep -Seconds 3
   Keys 'hello'; Shot 'console-window'
   Dump 'two-windows'
